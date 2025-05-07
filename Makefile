@@ -6,8 +6,6 @@ export $(shell sed 's/=.*//' .env)
 install_migrate:
 	go install -tags 'mysql' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
-databaseURL="mysql://root:password@tcp(127.0.0.1:3306)/urldb"
-
 migrate_up:
 	migrate -path="./database/migrate" -database=${DATABASE_URL} up
 

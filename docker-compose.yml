@@ -14,7 +14,7 @@ services:
       - MYSQL_DATABASE=url_db
       - "TZ=Asia/Shanghai"
     # volumes:
-      # - F:/_code/url_shortener/db/init:docker-entrypoint-initdb.d
+      # - ./db/init:docker-entrypoint-initdb.d
     restart: always
 
   # postgres:
