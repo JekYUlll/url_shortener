@@ -1,7 +1,7 @@
 # Go 短链接生成器
 
 [go: 从0到1实现短链接生成器 | urlshortener | golang | echo | sqlc | redis |](https://www.bilibili.com/video/BV1Unz9YiETV)。  
-用 gin + gorm 重写的练手项目。
+改为 gin + gorm + mysql。
 
 PostgreSQL中，`BIGSERIAL`是自动递增的 64-bit 整型主键，实际上是：`BIGINT + DEFAULT nextval(...) + 序列`
 

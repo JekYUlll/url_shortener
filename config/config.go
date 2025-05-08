@@ -2,7 +2,11 @@ package config
 
 import (
 	"fmt"
+	"log"
+	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 type Config struct {
@@ -11,6 +15,21 @@ type Config struct {
 	Server    ServerConfig    `mapstructure:"server"`
 	App       AppConfig       `mapstructure:"app"`
 	ShortCode ShortCodeConfig `mapstructure:"shortcode"`
+}
+
+func LoadConfig(filePath string) (*Config, error) {
+	viper.SetConfigFile(filePath)
+	viper.SetEnvPrefix("URL_SHORTENER")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, err
+	}
+	var config Config
+	if err := viper.Unmarshal(&config); err != nil {
+		return nil, err
+	}
+	return &config, nil
 }
 
 type DatabaseConfig struct {
@@ -26,7 +45,26 @@ type DatabaseConfig struct {
 }
 
 func (d DatabaseConfig) DNS() string {
-	return fmt.Sprintf("%s://%s:%s@%s:%d/%s?sslmode=%s", d.Driver, d.User, d.Password, d.Host, d.Port, d.DBName, d.SSLMode)
+	// encodedPassword := url.QueryEscape(d.Password)
+	switch strings.ToLower(d.Driver) {
+	case "mysql", "mariadb":
+		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&tls=%s",
+			d.User, d.Password, d.Host, d.Port, d.DBName, d.getTLSMode())
+	default:
+		log.Fatal("not support db")
+		return ""
+	}
+}
+
+func (d DatabaseConfig) getTLSMode() string {
+	switch strings.ToLower(d.SSLMode) {
+	case "require", "verify-ca", "verify-identity":
+		return "true"
+	case "disable":
+		return "false"
+	default:
+		return "skip-verify"
+	}
 }
 
 type RedisConfig struct {

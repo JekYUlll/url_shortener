@@ -1,17 +1,13 @@
 package main
 
 import (
-	"net/http"
-
-	"github.com/gin-gonic/gin"
+	"github.com/jekyulll/url_shortener/app"
 )
 
 func main() {
-	router := gin.Default()
-	router.GET("/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "pong",
-		})
-	})
-	router.Run()
+	a := app.Application{}
+	if err := a.Init("./config/config.yaml"); err != nil {
+		panic(err)
+	}
+	a.Run()
 }

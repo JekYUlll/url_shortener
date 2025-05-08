@@ -126,3 +126,7 @@ func (s *URLService) getShortCode(ctx context.Context, n int) (string, error) {
 	// 递归调用
 	return s.getShortCode(ctx, n+1)
 }
+
+func (s *URLService) DeleteExpired(ctx context.Context) error {
+	return s.repo.DeleteExpired(ctx)
+}

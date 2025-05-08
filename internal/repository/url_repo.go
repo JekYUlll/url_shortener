@@ -17,19 +17,19 @@ type URLRepository interface {
 	IsShortCodeAvailable(ctx context.Context, code string) (bool, error)
 }
 
-type uRLRepositoryImpl struct {
+type urlRepositoryImpl struct {
 	db *gorm.DB
 }
 
-func NewURLRepository(db *gorm.DB) *uRLRepositoryImpl {
-	return &uRLRepositoryImpl{db: db}
+func NewURLRepository(db *gorm.DB) *urlRepositoryImpl {
+	return &urlRepositoryImpl{db: db}
 }
 
-func (r *uRLRepositoryImpl) CreateURL(ctx context.Context, url *model.URL) error {
+func (r *urlRepositoryImpl) CreateURL(ctx context.Context, url *model.URL) error {
 	return r.db.Create(url).Error
 }
 
-func (r *uRLRepositoryImpl) GetURLByShortCode(ctx context.Context, code string) (*model.URL, error) {
+func (r *urlRepositoryImpl) GetURLByShortCode(ctx context.Context, code string) (*model.URL, error) {
 	var url model.URL
 	err := r.db.Where("short_code = ? AND (expired_at IS NULL OR expired_at > ?)", code).
 		First(&url).Error
@@ -44,28 +44,28 @@ func (r *uRLRepositoryImpl) GetURLByShortCode(ctx context.Context, code string) 
 }
 
 // TODO 过期时间
-func (r *uRLRepositoryImpl) GetAllURLs(ctx context.Context) ([]model.URL, error) {
+func (r *urlRepositoryImpl) GetAllURLs(ctx context.Context) ([]model.URL, error) {
 	var urls []model.URL
 	err := r.db.Find(&urls).Error
 	return urls, err
 }
 
-func (r *uRLRepositoryImpl) UpdateURL(ctx context.Context, url *model.URL) error {
+func (r *urlRepositoryImpl) UpdateURL(ctx context.Context, url *model.URL) error {
 	// gorm 的 Save 方法会根据主键值判断执行插入或更新
 	return r.db.Save(url).Error
 }
 
-func (r *uRLRepositoryImpl) DeleteURLByID(ctx context.Context, id uint) error {
+func (r *urlRepositoryImpl) DeleteURLByID(ctx context.Context, id uint) error {
 	return r.db.Delete(&model.URL{}, id).Error
 }
 
-func (r *uRLRepositoryImpl) DeleteExpired(ctx context.Context) error {
+func (r *urlRepositoryImpl) DeleteExpired(ctx context.Context) error {
 	return r.db.Where("expired_at < NOW()").Delete(&model.URL{}).Error
 }
 
 // TODO UpdateOriginalURL、ListRecent
 
-func (r *uRLRepositoryImpl) IsShortCodeAvailable(ctx context.Context, code string) (bool, error) {
+func (r *urlRepositoryImpl) IsShortCodeAvailable(ctx context.Context, code string) (bool, error) {
 	var cnt int64
 	// 统计有多少行和 short_code 匹配
 	if err := r.db.

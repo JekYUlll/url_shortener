@@ -2,19 +2,19 @@ package shortcode
 
 import "math/rand"
 
-type ShortCode struct {
+type ShortCodeGeneratorImpl struct {
 	length int
 }
 
-func NewShortCode(length int) *ShortCode {
-	return &ShortCode{
+func NewShortCodeGeneratorImpl(length int) *ShortCodeGeneratorImpl {
+	return &ShortCodeGeneratorImpl{
 		length: length,
 	}
 }
 
 const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-func (s *ShortCode) GenerateShortCode() string {
+func (s *ShortCodeGeneratorImpl) GenerateShortCode() string {
 	length := len(chars)
 	result := make([]byte, s.length)
 	for i := 0; i < s.length; i++ {

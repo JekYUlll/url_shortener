@@ -9,10 +9,6 @@ import (
 	"github.com/jekyulll/url_shortener/internal/dto"
 )
 
-// TODO
-// POST /api/url original_url, custom_code, duration -> 短url, 过期时间
-// GET /:code 把短url重定向到长URL
-
 type URLService interface {
 	CreateURL(ctx context.Context, req dto.CreateURLRequest) (*dto.CreateURLResponse, error)
 	GetURL(ctx context.Context, shortCode string) (string, error)
@@ -28,6 +24,7 @@ func NewURLHandler(urlService URLService) *URLHandler {
 	}
 }
 
+// POST /api/url original_url, custom_code, duration -> 短url, 过期时间
 func (h *URLHandler) CreateURL(c *gin.Context) {
 	// 1.提取数据
 	var req dto.CreateURLRequest
@@ -58,7 +55,9 @@ func (h *URLHandler) CreateURL(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp)
 }
 
-// GET /:code 重定向
+// GET /:code 把短url重定向到长URL
+// TODO 每次访问时，统计该短链接访问次数
+// TODO 刷新过期时间
 func (h *URLHandler) RedirectURL(c *gin.Context) {
 	// 取出 code
 	shortCode := c.Param("code")
@@ -73,3 +72,10 @@ func (h *URLHandler) RedirectURL(c *gin.Context) {
 	// 永久重定向（浏览器会缓存）
 	c.Redirect(http.StatusPermanentRedirect, originalURL)
 }
+
+// TODO
+// GET /api/url/:code
+// 获取该 url 的浏览量
+// 1. 通过短链接 url，到数据库中获取 views1
+// 2. 去 redis 缓存中查看浏览量 views2
+// 3. 返回 views1 + views2
