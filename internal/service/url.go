@@ -11,7 +11,10 @@ import (
 	"github.com/jekyulll/url_shortener/internal/model"
 	"github.com/jekyulll/url_shortener/internal/repository"
 	"github.com/jekyulll/url_shortener/pkg/filter"
-	"gorm.io/gorm"
+)
+
+var (
+	ErrShortCodeTaken = errors.New("short code already taken")
 )
 
 type Cacher interface {
@@ -25,6 +28,7 @@ type ShortCodeGenerator interface {
 
 type URLService struct {
 	repo               repository.URLRepository
+	filter             filter.BloomFilter
 	shortCodeGenerator ShortCodeGenerator
 	defaultDuration    time.Duration
 	cache              Cacher
@@ -32,16 +36,18 @@ type URLService struct {
 }
 
 // TODO 此处传入 filter 是否合理？
-func NewURLService(db *gorm.DB, filter *filter.BloomFilterImpl, generator ShortCodeGenerator, duration time.Duration, cache Cacher, baseURL string) *URLService {
+func New(repo repository.URLRepository, filter filter.BloomFilter, generator ShortCodeGenerator, duration time.Duration, cache Cacher, baseURL string) *URLService {
 	return &URLService{
-		repo:               repository.NewURLRepository(db, filter),
+		repo:               repo,
 		shortCodeGenerator: generator,
 		defaultDuration:    duration,
 		cache:              cache,
 		bashURL:            baseURL,
+		filter:             filter,
 	}
 }
 
+// 如出错返回 err，如短链接已存在，返回预定义错误 ErrShortCodeTaken
 func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*dto.CreateURLResponse, error) {
 	// 1. 决定要用的短码：优先用用户自己的，其次自动生成
 	code := req.CustomeCode
@@ -53,31 +59,33 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 		}
 	} else {
 		// 如果用户定制，先验证它是否可用
-		ok, err := s.repo.IsShortCodeAvailable(ctx, code)
+		ok, err := s.IsShortCodeAvailable(ctx, code)
 		if err != nil {
 			return nil, fmt.Errorf("check custom shortcode: %w", err)
 		}
 		if !ok {
-			return nil, fmt.Errorf("custom shortcode %q already taken", code)
+			return nil, ErrShortCodeTaken
 		}
 	}
-	// 2. 组装要入库的 URL 实体
+	// 2. 写入布隆过滤器 --已测试
+	s.filter.Add(code)
+	// 3. 组装要入库的 URL 实体
 	u := &model.URL{
 		OriginalURL: req.OriginalURL,
 		ShortCode:   code,
 		IsCustom:    req.CustomeCode != "",
 	}
-	// 3. 处理过期时间：不传的话使用默认有效期
+	// 4. 处理过期时间：不传的话使用默认有效期
 	if req.Duration == nil {
 		u.ExpiredAt = time.Now().Add(s.defaultDuration)
 	} else {
 		u.ExpiredAt = time.Now().Add(time.Duration(*req.Duration) * time.Hour)
 	}
-	// 4. 写库
+	// 5. 写库
 	if err := s.repo.CreateURL(ctx, u); err != nil {
 		return nil, fmt.Errorf("create url record: %w", err)
 	}
-	// 5. 异步写缓存
+	// 6. 异步写缓存
 	go func() {
 		if err := s.cache.SetURL(ctx, *u); err != nil {
 			// 此处记录日志而不中断流程
@@ -117,14 +125,13 @@ func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, erro
 	return url.OriginalURL, nil
 }
 
-// getShortCode
 // @pragma n:重试次数
 func (s *URLService) getShortCode(ctx context.Context, n int) (string, error) {
 	if n > 5 {
 		return "", errors.New("retry too many times")
 	}
 	code := s.shortCodeGenerator.GenerateShortCode()
-	ok, err := s.repo.IsShortCodeAvailable(ctx, code)
+	ok, err := s.IsShortCodeAvailable(ctx, code)
 	if err != nil {
 		return "", err
 	}
@@ -137,4 +144,19 @@ func (s *URLService) getShortCode(ctx context.Context, n int) (string, error) {
 
 func (s *URLService) DeleteExpired(ctx context.Context) error {
 	return s.repo.DeleteExpired(ctx)
+}
+
+// NEW: 将 IsShortCodeAvailable 从 repo 层提到 service, 与布隆过滤器的判断整合
+// TODO 增加缓存的逻辑
+// TODO 如果存在于数据库、但是过期了，实际上是可以生成的 —— 生成新链接，写入数据库覆盖之前的
+func (s *URLService) IsShortCodeAvailable(ctx context.Context, shortCode string) (bool, error) {
+	if !s.filter.Exists(shortCode) { // 布隆过滤器中不存在，则一定不存在。 --已测试
+		return true, nil
+	}
+	// 布隆过滤器中存在，仍然可能不存在。判断是否在数据库中
+	isInDB, err := s.repo.ExistsInDB(ctx, shortCode)
+	if err != nil {
+		return false, err
+	}
+	return !isInDB, nil
 }

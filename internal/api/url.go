@@ -2,11 +2,13 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/jekyulll/url_shortener/internal/dto"
+	"github.com/jekyulll/url_shortener/internal/service"
 )
 
 type URLService interface {
@@ -46,9 +48,11 @@ func (h *URLHandler) CreateURL(c *gin.Context) {
 	// 3. 调用业务函数
 	resp, err := h.urlService.CreateURL(c.Request.Context(), req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+		status := http.StatusInternalServerError
+		if errors.Is(err, service.ErrShortCodeTaken) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
 	// 4. 返回响应

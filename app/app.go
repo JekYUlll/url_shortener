@@ -17,6 +17,7 @@ import (
 	"github.com/jekyulll/url_shortener/database"
 	"github.com/jekyulll/url_shortener/internal/api"
 	"github.com/jekyulll/url_shortener/internal/cache"
+	"github.com/jekyulll/url_shortener/internal/repository"
 	"github.com/jekyulll/url_shortener/internal/service"
 	"github.com/jekyulll/url_shortener/pkg/filter"
 	"github.com/jekyulll/url_shortener/pkg/shortcode"
@@ -58,9 +59,11 @@ func (a *Application) Init(configPath string) error {
 
 	a.generator = shortcode.NewShortCodeGeneratorImpl(cfg.ShortCode.Length)
 
-	filter := filter.NewBloomFilter(a.cfg.Filter.Capacity, a.cfg.Filter.ErrorRate)
+	filter := filter.New(a.cfg.Filter.Capacity, a.cfg.Filter.ErrorRate)
 
-	a.urlService = service.NewURLService(a.db, filter, a.generator,
+	urlRepo := repository.New(a.db)
+
+	a.urlService = service.New(urlRepo, filter, a.generator,
 		cfg.App.DefaultDuration, redisClinet, cfg.App.BaseURL)
 
 	a.urlHandler = api.NewURLHandler(a.urlService)
@@ -154,7 +157,6 @@ func (a *Application) shutDown() {
 	// gin 的优雅退出
 
 	// 5s时间退出
-	// TODO 思考：如果不优雅退出有什么后果？
 	_, cancle := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancle()
 }
