@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/jekyulll/url_shortener/internal/dto"
 	"github.com/jekyulll/url_shortener/internal/model"
 	"github.com/jekyulll/url_shortener/internal/repository"
+	"github.com/jekyulll/url_shortener/pkg/filter"
 	"gorm.io/gorm"
 )
 
@@ -29,9 +31,10 @@ type URLService struct {
 	bashURL            string
 }
 
-func NewURLService(db *gorm.DB, generator ShortCodeGenerator, duration time.Duration, cache Cacher, baseURL string) *URLService {
+// TODO 此处传入 filter 是否合理？
+func NewURLService(db *gorm.DB, filter *filter.BloomFilterImpl, generator ShortCodeGenerator, duration time.Duration, cache Cacher, baseURL string) *URLService {
 	return &URLService{
-		repo:               repository.NewURLRepository(db),
+		repo:               repository.NewURLRepository(db, filter),
 		shortCodeGenerator: generator,
 		defaultDuration:    duration,
 		cache:              cache,
@@ -74,12 +77,14 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 	if err := s.repo.CreateURL(ctx, u); err != nil {
 		return nil, fmt.Errorf("create url record: %w", err)
 	}
-	// 5.  写缓存
-	if err := s.cache.SetURL(ctx, *u); err != nil {
-		return nil, err
-	}
+	// 5. 异步写缓存
+	go func() {
+		if err := s.cache.SetURL(ctx, *u); err != nil {
+			// 此处记录日志而不中断流程
+			log.Printf("failed to set cache: %v", err)
+		}
+	}()
 	// 6. 返回给上层
-	//    假设短链的域名前缀是 https://short.ly/
 	return &dto.CreateURLResponse{
 		ShortUrl:  s.bashURL + "/" + u.ShortCode,
 		ExpiredAt: u.ExpiredAt,
@@ -100,12 +105,15 @@ func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	if url != nil {
-		// 存入缓存
-		if err := s.cache.SetURL(ctx, *url); err != nil {
-			return url.OriginalURL, err
-		}
+	if url == nil { // 不是查询出错，而是数据库没该数据
+		return "", nil
 	}
+	// 存入缓存
+	go func() {
+		if err := s.cache.SetURL(ctx, *url); err != nil {
+			log.Printf("failed to set cache: %v", err)
+		}
+	}()
 	return url.OriginalURL, nil
 }
 

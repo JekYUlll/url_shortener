@@ -18,18 +18,23 @@ import (
 	"github.com/jekyulll/url_shortener/internal/api"
 	"github.com/jekyulll/url_shortener/internal/cache"
 	"github.com/jekyulll/url_shortener/internal/service"
+	"github.com/jekyulll/url_shortener/pkg/filter"
 	"github.com/jekyulll/url_shortener/pkg/shortcode"
 	"gorm.io/gorm"
 )
 
 type Application struct {
-	e           *gin.Engine
+	r           *gin.Engine
 	db          *gorm.DB
 	redisClinet *cache.RedisCache
 	urlService  *service.URLService
 	urlHandler  *api.URLHandler
 	cfg         *config.Config
 	generator   *shortcode.ShortCodeGeneratorImpl
+}
+
+func New() *Application {
+	return &Application{}
 }
 
 func (a *Application) Init(configPath string) error {
@@ -53,7 +58,9 @@ func (a *Application) Init(configPath string) error {
 
 	a.generator = shortcode.NewShortCodeGeneratorImpl(cfg.ShortCode.Length)
 
-	a.urlService = service.NewURLService(a.db, a.generator,
+	filter := filter.NewBloomFilter(a.cfg.Filter.Capacity, a.cfg.Filter.ErrorRate)
+
+	a.urlService = service.NewURLService(a.db, filter, a.generator,
 		cfg.App.DefaultDuration, redisClinet, cfg.App.BaseURL)
 
 	a.urlHandler = api.NewURLHandler(a.urlService)
@@ -63,29 +70,32 @@ func (a *Application) Init(configPath string) error {
 	// Log中间件未设置
 	// CORS未设置
 	// Recover未设置
-	e := gin.Default()
-	// e.Use()
-	e.POST("/api/url", a.urlHandler.CreateURL)
-	e.GET(":code", a.urlHandler.RedirectURL)
-	a.e = e
+	r := gin.Default()
+	// r.Use()
+	r.POST("/api/url", a.urlHandler.CreateURL)
+	r.GET(":code", a.urlHandler.RedirectURL)
+	a.r = r
 	return nil
 }
 
 func (a *Application) Run() {
 	go a.start()
 	go a.tickCleanUp()
+
 	a.shutDown()
 }
 
 func (a *Application) start() {
-	if err := a.e.Run(a.cfg.Server.Addr); err != nil {
+	if err := a.r.Run(a.cfg.Server.Addr); err != nil {
 		log.Println(err)
 	}
 	// 开机时清理一次过期url
-	if err := a.urlService.DeleteExpired(context.Background()); err != nil {
-		log.Println(err)
-	}
-
+	// TODO 似乎没有生效
+	go func() {
+		if err := a.urlService.DeleteExpired(context.Background()); err != nil {
+			log.Println(err)
+		}
+	}()
 	// 用 gracehttp 代替 gin 的 Run, 自动优雅退出
 	// ! gracehttp 只能在 Linux 上用
 
@@ -102,12 +112,22 @@ func (a *Application) start() {
 func (a *Application) tickCleanUp() {
 	ticker := time.NewTicker(a.cfg.App.CleanupInterval)
 	defer ticker.Stop()
-	for _ = range ticker.C {
+	for range ticker.C {
 		if err := a.urlService.DeleteExpired(context.Background()); err != nil {
 			log.Println(err)
 		}
 	}
 }
+
+// func (a *Application) tickRebuildFilter() {
+// 	ticker := time.NewTicker(24 * time.Hour)
+// 	defer ticker.Stop()
+// 	for range ticker.C {
+// 		if err := a.repo.RebuildBloomFilter(context.Background()); err != nil {
+// 			// TODO 层级设计错误
+// 		}
+// 	}
+// }
 
 func (a *Application) shutDown() {
 	quit := make(chan os.Signal, 1)

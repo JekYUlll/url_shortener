@@ -15,6 +15,7 @@ type Config struct {
 	Server    ServerConfig    `mapstructure:"server"`
 	App       AppConfig       `mapstructure:"app"`
 	ShortCode ShortCodeConfig `mapstructure:"shortcode"`
+	Filter    FilterConfig    `mapstructure:"filter"`
 }
 
 func LoadConfig(filePath string) (*Config, error) {
@@ -87,4 +88,9 @@ type AppConfig struct {
 
 type ShortCodeConfig struct {
 	Length int `mapstructure:"length"`
+}
+
+type FilterConfig struct {
+	Capacity  uint    `mapstructure:"capacity"`
+	ErrorRate float64 `mapstructure:"error_rate"`
 }

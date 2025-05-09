@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	a := app.Application{}
+	a := app.New()
 	if err := a.Init("./config/config.yaml"); err != nil {
 		panic(err)
 	}

@@ -69,6 +69,12 @@ func (h *URLHandler) RedirectURL(c *gin.Context) {
 		})
 		return
 	}
+	if originalURL == "" {
+		c.JSON(404, gin.H{
+			"error": "no such short code",
+		})
+		return
+	}
 	// 永久重定向（浏览器会缓存）
 	c.Redirect(http.StatusPermanentRedirect, originalURL)
 }
