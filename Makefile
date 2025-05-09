@@ -19,7 +19,7 @@ install_sqlc:
 # postgres
 install_postgres:
 	docker run --name postgres_urls \
-	-e POSTGRES_USER=horeb \
+	-e POSTGRES_USER=root \
 	-e POSTGRES_PASSWORD=password \
 	-e POSTGRES_DB=urldb \
 	-p 5432:5432 \

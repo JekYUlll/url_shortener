@@ -1,12 +1,15 @@
-# Go 短链接生成器
+# Go 短链接生成
 
-[go: 从0到1实现短链接生成器 | urlshortener | golang | echo | sqlc | redis |](https://www.bilibili.com/video/BV1Unz9YiETV)。  
+原作者：[go: 从0到1实现短链接生成器 | urlshortener | golang | echo | sqlc | redis |](https://www.bilibili.com/video/BV1Unz9YiETV)。  
+原项目地址：https://github.com/aeilang/urlshortener
 
-改为 gin + gorm + mysql。
+进行重写，改为 **gin** + **gorm** + **mysql**，添加布隆过滤器。
 
-HTTP请求 → API层 → Service层 → Repository层（DAO） → 数据库
+---
 
-PostgreSQL中，`BIGSERIAL`是自动递增的 64-bit 整型主键，实际上是：`BIGINT + DEFAULT nextval(...) + 序列`
+### 运行前：
+
+- 修改`config/config.yaml.template`内容，并删除`.template`后缀；  
 
 ---
 
@@ -15,16 +18,4 @@ PostgreSQL中，`BIGSERIAL`是自动递增的 64-bit 整型主键，实际上是
 docker:
 ```bash
 docker-compose up -d
-```
-
-sqlc:
-
-```bash
-brew install sqlc
-```
-
-migrate:
-
-```bash
-brew install golang-migrate
 ```
