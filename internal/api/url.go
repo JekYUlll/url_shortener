@@ -61,7 +61,6 @@ func (h *URLHandler) CreateURL(c *gin.Context) {
 
 // GET /:code 把短url重定向到长URL
 // TODO 每次访问时，统计该短链接访问次数
-// TODO 刷新过期时间
 func (h *URLHandler) RedirectURL(c *gin.Context) {
 	// 取出 code
 	shortCode := c.Param("code")

@@ -95,7 +95,7 @@ func (a *Application) start() {
 	// 开机时清理一次过期url
 	// TODO 似乎没有生效
 	go func() {
-		if err := a.urlService.DeleteExpired(context.Background()); err != nil {
+		if err := a.urlService.DeleteAllExpired(context.Background()); err != nil {
 			log.Println(err)
 		}
 	}()
@@ -116,7 +116,7 @@ func (a *Application) tickCleanUp() {
 	ticker := time.NewTicker(a.cfg.App.CleanupInterval)
 	defer ticker.Stop()
 	for range ticker.C {
-		if err := a.urlService.DeleteExpired(context.Background()); err != nil {
+		if err := a.urlService.DeleteAllExpired(context.Background()); err != nil {
 			log.Println(err)
 		}
 	}

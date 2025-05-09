@@ -14,3 +14,11 @@ type URL struct {
 func (u *URL) TableName() string {
 	return "urls"
 }
+
+func (u *URL) IsExpired() bool {
+	return u.ExpiredAt.Before(time.Now())
+}
+
+func (u *URL) Renew(duration time.Duration) {
+	u.ExpiredAt = time.Now().Add(duration)
+}

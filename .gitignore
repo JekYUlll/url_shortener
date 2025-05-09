@@ -22,9 +22,11 @@ go.work
 go.work.sum
 
 # env file
-# .env
+.env
 
 # db
 db/
 
 tmp/
+
+config/config.yaml

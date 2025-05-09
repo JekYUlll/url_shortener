@@ -11,10 +11,15 @@ import (
 	"github.com/jekyulll/url_shortener/internal/model"
 	"github.com/jekyulll/url_shortener/internal/repository"
 	"github.com/jekyulll/url_shortener/pkg/filter"
+	"gorm.io/gorm"
 )
 
-var (
-	ErrShortCodeTaken = errors.New("short code already taken")
+type CodeStatus int
+
+const (
+	CodeAvailable CodeStatus = iota // 全新可用
+	CodeExpired                     // 存在但已过期
+	CodeInUse                       // 存在且有效
 )
 
 type Cacher interface {
@@ -35,8 +40,13 @@ type URLService struct {
 	bashURL            string
 }
 
-// TODO 此处传入 filter 是否合理？
 func New(repo repository.URLRepository, filter filter.BloomFilter, generator ShortCodeGenerator, duration time.Duration, cache Cacher, baseURL string) *URLService {
+	// 启动时加载所有有效短码到过滤器
+	if urls, err := repo.GetAllActiveURLs(context.Background()); err == nil {
+		for _, url := range urls {
+			filter.Add(url.ShortCode)
+		}
+	}
 	return &URLService{
 		repo:               repo,
 		shortCodeGenerator: generator,
@@ -59,15 +69,15 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 		}
 	} else {
 		// 如果用户定制，先验证它是否可用
-		ok, err := s.IsShortCodeAvailable(ctx, code)
+		status, err := s.CheckShortCode(ctx, code)
 		if err != nil {
 			return nil, fmt.Errorf("check custom shortcode: %w", err)
 		}
-		if !ok {
+		if status == CodeInUse {
 			return nil, ErrShortCodeTaken
 		}
 	}
-	// 2. 写入布隆过滤器 --已测试
+	// 2. 写入布隆过滤器
 	s.filter.Add(code)
 	// 3. 组装要入库的 URL 实体
 	u := &model.URL{
@@ -82,7 +92,9 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 		u.ExpiredAt = time.Now().Add(time.Duration(*req.Duration) * time.Hour)
 	}
 	// 5. 写库
-	if err := s.repo.CreateURL(ctx, u); err != nil {
+	// TODO 此处内部是 gorm 的 Save，比Insert/Update多一次SELECT查询
+	// 若优化，应该增加 IsShortCodeAvailable 的返回值或错误码，如果是已过期，则直接更新，如果不存在则插入
+	if err := s.repo.UpdateURL(ctx, u); err != nil {
 		return nil, fmt.Errorf("create url record: %w", err)
 	}
 	// 6. 异步写缓存
@@ -100,7 +112,7 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 }
 
 func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, error) {
-	// 访问缓存
+	// 1. 访问缓存
 	url, err := s.cache.GetURL(ctx, shortCode)
 	if err != nil {
 		return "", err
@@ -108,7 +120,7 @@ func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, erro
 	if url != nil {
 		return url.OriginalURL, nil
 	}
-	// 缓存中不存在，访问数据库
+	// 2. 缓存中不存在，访问数据库
 	url, err = s.repo.GetURLByShortCode(ctx, shortCode)
 	if err != nil {
 		return "", err
@@ -116,7 +128,7 @@ func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, erro
 	if url == nil { // 不是查询出错，而是数据库没该数据
 		return "", nil
 	}
-	// 存入缓存
+	// 3. 存入缓存
 	go func() {
 		if err := s.cache.SetURL(ctx, *url); err != nil {
 			log.Printf("failed to set cache: %v", err)
@@ -131,32 +143,38 @@ func (s *URLService) getShortCode(ctx context.Context, n int) (string, error) {
 		return "", errors.New("retry too many times")
 	}
 	code := s.shortCodeGenerator.GenerateShortCode()
-	ok, err := s.IsShortCodeAvailable(ctx, code)
+	status, err := s.CheckShortCode(ctx, code)
 	if err != nil {
 		return "", err
 	}
-	if ok {
+	if status == CodeAvailable || status == CodeExpired {
 		return code, nil
 	}
 	// 递归调用
 	return s.getShortCode(ctx, n+1)
 }
 
-func (s *URLService) DeleteExpired(ctx context.Context) error {
-	return s.repo.DeleteExpired(ctx)
+func (s *URLService) DeleteAllExpired(ctx context.Context) error {
+	return s.repo.DeleteAllExpired(ctx)
 }
 
-// NEW: 将 IsShortCodeAvailable 从 repo 层提到 service, 与布隆过滤器的判断整合
+// NEW: 从 repo 层提到 service, 与布隆过滤器的判断整合
 // TODO 增加缓存的逻辑
-// TODO 如果存在于数据库、但是过期了，实际上是可以生成的 —— 生成新链接，写入数据库覆盖之前的
-func (s *URLService) IsShortCodeAvailable(ctx context.Context, shortCode string) (bool, error) {
+// 如果存在于数据库、但是过期了，也视为合法 —— 生成新链接，写入数据库覆盖之前的
+func (s *URLService) CheckShortCode(ctx context.Context, shortCode string) (CodeStatus, error) {
 	if !s.filter.Exists(shortCode) { // 布隆过滤器中不存在，则一定不存在。 --已测试
-		return true, nil
+		return CodeAvailable, nil
 	}
 	// 布隆过滤器中存在，仍然可能不存在。判断是否在数据库中
-	isInDB, err := s.repo.ExistsInDB(ctx, shortCode)
-	if err != nil {
-		return false, err
+	url, err := s.repo.GetURLByShortCode(ctx, shortCode)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return CodeAvailable, nil // 不存在
 	}
-	return !isInDB, nil
+	if err != nil {
+		return CodeInUse, err
+	}
+	if url.IsExpired() {
+		return CodeExpired, nil
+	}
+	return CodeInUse, nil
 }
