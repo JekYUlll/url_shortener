@@ -77,6 +77,7 @@ func (a *Application) Init(configPath string) error {
 	// r.Use()
 	r.POST("/api/url", a.urlHandler.CreateURL)
 	r.GET(":code", a.urlHandler.RedirectURL)
+	r.GET("/", a.urlHandler.DefaultURL)
 	a.r = r
 	return nil
 }
