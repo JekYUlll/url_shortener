@@ -14,6 +14,7 @@ func NewShortCodeGeneratorImpl(length int) *ShortCodeGeneratorImpl {
 
 const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+// 使用随机数生成的短码
 func (s *ShortCodeGeneratorImpl) GenerateShortCode() string {
 	length := len(chars)
 	result := make([]byte, s.length)
@@ -22,3 +23,6 @@ func (s *ShortCodeGeneratorImpl) GenerateShortCode() string {
 	}
 	return string(result)
 }
+
+// 解决重复长地址转换攻击
+// TODO 使用布隆过滤器存储长地址，每次转换前先判断下长地址是否已经转换过。
