@@ -6,12 +6,14 @@ import (
 
 	"github.com/jekyulll/url_shortener/internal/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type URLRepository interface {
 	CreateURL(ctx context.Context, url *model.URL) error
 	GetURLByShortCode(ctx context.Context, shortCode string) (*model.URL, error)
 	UpdateURL(ctx context.Context, url *model.URL) error
+	UpsertURL(ctx context.Context, url *model.URL) error
 	DeleteURLByID(ctx context.Context, id uint) error
 
 	GetAllURLs(ctx context.Context) ([]model.URL, error)
@@ -64,9 +66,19 @@ func (r *gormURLRepositoryImpl) GetAllActiveURLs(ctx context.Context) ([]model.U
 	return urls, err
 }
 
+// Deprecated:
+// gorm 的 Save 方法会根据主键值判断执行插入或更新
+// 然而此处 short_code 并不是主键
 func (r *gormURLRepositoryImpl) UpdateURL(ctx context.Context, url *model.URL) error {
-	// gorm 的 Save 方法会根据主键值判断执行插入或更新
 	return r.db.Save(url).Error
+}
+
+// 根据 short_code 是否存在执行插入或者更新
+func (r *gormURLRepositoryImpl) UpsertURL(ctx context.Context, url *model.URL) error {
+	return r.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "short_code"}},
+		DoUpdates: clause.AssignmentColumns([]string{"original_url", "expired_at", "is_custom"}),
+	}).Create(url).Error
 }
 
 func (r *gormURLRepositoryImpl) DeleteURLByID(ctx context.Context, id uint) error {

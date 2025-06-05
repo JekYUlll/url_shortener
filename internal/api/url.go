@@ -12,6 +12,7 @@ import (
 )
 
 type URLService interface {
+	// DefaultURL(ctx context.Context) error
 	CreateURL(ctx context.Context, req dto.CreateURLRequest) (*dto.CreateURLResponse, error)
 	GetURL(ctx context.Context, shortCode string) (string, error)
 }
@@ -24,6 +25,15 @@ func NewURLHandler(urlService URLService) *URLHandler {
 	return &URLHandler{
 		urlService: urlService,
 	}
+}
+
+// GET /
+func (h *URLHandler) DefaultURL(c *gin.Context) {
+	c.JSON(http.StatusOK,
+		gin.H{
+			"message": "this is a url shortener",
+		},
+	)
 }
 
 // POST /api/url original_url, custom_code, duration -> 短url, 过期时间

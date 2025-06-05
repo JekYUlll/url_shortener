@@ -68,7 +68,7 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 			return nil, err
 		}
 	} else {
-		// 如果用户定制，先验证它是否可用
+		// 用户定制，先验证它是否可用
 		status, err := s.CheckShortCode(ctx, code)
 		if err != nil {
 			return nil, fmt.Errorf("check custom shortcode: %w", err)
@@ -92,15 +92,12 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 		u.ExpiredAt = time.Now().Add(time.Duration(*req.Duration) * time.Hour)
 	}
 	// 5. 写库
-	// TODO 此处内部是 gorm 的 Save，比Insert/Update多一次SELECT查询
-	// 若优化，应该增加 IsShortCodeAvailable 的返回值或错误码，如果是已过期，则直接更新，如果不存在则插入
-	if err := s.repo.UpdateURL(ctx, u); err != nil {
+	if err := s.repo.UpsertURL(ctx, u); err != nil {
 		return nil, fmt.Errorf("create url record: %w", err)
 	}
 	// 6. 异步写缓存
 	go func() {
 		if err := s.cache.SetURL(ctx, *u); err != nil {
-			// 此处记录日志而不中断流程
 			log.Printf("failed to set cache: %v", err)
 		}
 	}()
@@ -112,7 +109,11 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 }
 
 func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, error) {
-	// 1. 访问缓存
+	// 1. 查找布隆过滤器
+	if !s.filter.Exists(shortCode) { // 布隆过滤器中不存在，则一定不存在。
+		return "", nil
+	}
+	// 2. 访问缓存
 	url, err := s.cache.GetURL(ctx, shortCode)
 	if err != nil {
 		return "", err
@@ -120,7 +121,7 @@ func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, erro
 	if url != nil {
 		return url.OriginalURL, nil
 	}
-	// 2. 缓存中不存在，访问数据库
+	// 3. 缓存中不存在，访问数据库
 	url, err = s.repo.GetURLByShortCode(ctx, shortCode)
 	if err != nil {
 		return "", err
@@ -128,7 +129,7 @@ func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, erro
 	if url == nil { // 不是查询出错，而是数据库没该数据
 		return "", nil
 	}
-	// 3. 存入缓存
+	// 4. 存入缓存
 	go func() {
 		if err := s.cache.SetURL(ctx, *url); err != nil {
 			log.Printf("failed to set cache: %v", err)
@@ -162,7 +163,7 @@ func (s *URLService) DeleteAllExpired(ctx context.Context) error {
 // TODO 增加缓存的逻辑
 // 如果存在于数据库、但是过期了，也视为合法 —— 生成新链接，写入数据库覆盖之前的
 func (s *URLService) CheckShortCode(ctx context.Context, shortCode string) (CodeStatus, error) {
-	if !s.filter.Exists(shortCode) { // 布隆过滤器中不存在，则一定不存在。 --已测试
+	if !s.filter.Exists(shortCode) { // 布隆过滤器中不存在，则一定不存在。
 		return CodeAvailable, nil
 	}
 	// 布隆过滤器中存在，仍然可能不存在。判断是否在数据库中
