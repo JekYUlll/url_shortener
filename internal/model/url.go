@@ -7,6 +7,7 @@ type URL struct {
 	OriginalURL string    `gorm:"column:original_url;type:text;not null"`
 	ShortCode   string    `gorm:"column:short_code;type:text;not null;size:100;uniqueIndex"`
 	IsCustom    bool      `gorm:"column:is_custom;not null;default:false"`
+	Views       int32     `json:"views"`
 	ExpiredAt   time.Time `gorm:"column:expired_at;type:timestamp;not null"`
 	CreatedAt   time.Time `gorm:"column:created_at;type:timestamp;not null;autoCreateTime"`
 }

@@ -11,7 +11,18 @@ import (
 
 type URLRepository interface {
 	CreateURL(ctx context.Context, url *model.URL) error
+	CreateUser(ctx context.Context, user model.User) error
+	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
+	UpdatePasswordByEmail(ctx context.Context, passwordHash string, email string) error
+
+	// IsEmailAvailable TODO 我都把IsShortCodeAvailable提到其他层了，这玩意需要提上去吗
+	IsEmailAvailable(ctx context.Context, email string) (bool, error)
+
 	GetURLByShortCode(ctx context.Context, shortCode string) (*model.URL, error)
+	GetURLsByUserID(ctx context.Context, id int32, limit int32, offset int32) ([]*model.URL, error)
+	DeleteURLByShortCode(ctx context.Context, shortCode string) error
+	UpdateURLExpiredByShortCode(ctx context.Context, shortCode string) error
+
 	UpdateURL(ctx context.Context, url *model.URL) error
 	UpsertURL(ctx context.Context, url *model.URL) error
 	DeleteURLByID(ctx context.Context, id uint) error

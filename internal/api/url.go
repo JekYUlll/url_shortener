@@ -11,17 +11,17 @@ import (
 	"github.com/jekyulll/url_shortener/internal/service"
 )
 
-type URLService interface {
+type URLServicer interface {
 	// DefaultURL(ctx context.Context) error
 	CreateURL(ctx context.Context, req dto.CreateURLRequest) (*dto.CreateURLResponse, error)
 	GetURL(ctx context.Context, shortCode string) (string, error)
 }
 
 type URLHandler struct {
-	urlService URLService
+	urlService URLServicer
 }
 
-func NewURLHandler(urlService URLService) *URLHandler {
+func NewURLHandler(urlService URLServicer) *URLHandler {
 	return &URLHandler{
 		urlService: urlService,
 	}

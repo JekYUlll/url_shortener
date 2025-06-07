@@ -30,6 +30,7 @@ type Application struct {
 	redisClinet *cache.RedisCache
 	urlService  *service.URLService
 	urlHandler  *api.URLHandler
+	userHandler *api.UserHandler
 	cfg         *config.Config
 	generator   *shortcode.ShortCodeGeneratorImpl
 }
@@ -73,12 +74,16 @@ func (a *Application) Init(configPath string) error {
 	// Log中间件未设置
 	// CORS未设置
 	// Recover未设置
-	r := gin.Default()
-	// r.Use()
-	r.POST("/api/url", a.urlHandler.CreateURL)
-	r.GET(":code", a.urlHandler.RedirectURL)
-	r.GET("/", a.urlHandler.DefaultURL)
-	a.r = r
+
+	// r := gin.Default()
+	// // r.Use()
+	// r.POST("/api/url", a.urlHandler.CreateURL)
+	// r.GET(":code", a.urlHandler.RedirectURL)
+	// r.GET("/", a.urlHandler.DefaultURL)
+	// a.r = r
+
+	a.initRouter()
+
 	return nil
 }
 

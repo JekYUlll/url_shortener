@@ -16,20 +16,28 @@ type Config struct {
 	App       AppConfig       `mapstructure:"app"`
 	ShortCode ShortCodeConfig `mapstructure:"shortcode"`
 	Filter    FilterConfig    `mapstructure:"filter"`
+	Logger    LogConfig       `mapstructure:"logger"`
+	Email     EmailConfig     `mapstructure:"email"`
+	JWT       JWTConfig       `mapstructure:"jwt"`
 }
+
+// var Cfg *Config
 
 func LoadConfig(filePath string) (*Config, error) {
 	viper.SetConfigFile(filePath)
 	viper.SetEnvPrefix("URL_SHORTENER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
+
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
 	}
+
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
+
 	return &config, nil
 }
 
@@ -93,4 +101,26 @@ type ShortCodeConfig struct {
 type FilterConfig struct {
 	Capacity  uint    `mapstructure:"capacity"`
 	ErrorRate float64 `mapstructure:"error_rate"`
+}
+
+type LogConfig struct {
+	Level string `mapstructure:"level"`
+}
+
+type RandNumConfig struct {
+	Length int `mapstructure:"length"`
+}
+
+type JWTConfig struct {
+	Secret   string        `mapstructure:"secret"`
+	Duration time.Duration `mapstructure:"duration"`
+}
+
+type EmailConfig struct {
+	Password    string `mapstructure:"password"`
+	Username    string `mapstructure:"username"`
+	HostAddress string `mapstructure:"host_address"`
+	HostPort    string `mapstructure:"host_port"`
+	Subject     string `mapstructure:"subject"`
+	TestMail    string `mapstructure:"test_mail"`
 }

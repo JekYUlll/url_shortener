@@ -10,8 +10,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const urlPrefix = "url:"
+
 type RedisCache struct {
-	client *redis.Client
+	client            *redis.Client
+	urlDuration       time.Duration
+	emailCodeDuration time.Duration
 }
 
 func NewRedisCache(cfg config.RedisConfig) (*RedisCache, error) {
@@ -28,20 +32,20 @@ func NewRedisCache(cfg config.RedisConfig) (*RedisCache, error) {
 	}, nil
 }
 
-func (c *RedisCache) SetURL(ctx context.Context, url model.URL) error {
+func (cache *RedisCache) SetURL(ctx context.Context, url model.URL) error {
 	data, err := json.Marshal(url)
 	if err != nil {
 		return err
 	}
-	cmd := c.client.Set(ctx, url.ShortCode, data, time.Until(url.ExpiredAt))
+	cmd := cache.client.Set(ctx, url.ShortCode, data, time.Until(url.ExpiredAt))
 	if cmd.Err() != nil {
 		return cmd.Err()
 	}
 	return nil
 }
 
-func (c *RedisCache) GetURL(ctx context.Context, shortCode string) (*model.URL, error) {
-	cmd := c.client.Get(ctx, shortCode)
+func (cache *RedisCache) GetURL(ctx context.Context, shortCode string) (*model.URL, error) {
+	cmd := cache.client.Get(ctx, shortCode)
 	if err := cmd.Err(); err != nil {
 		// Get 不到值时会返回 redis.Nil，这是「缓存未命中」的正常情况
 		if err == redis.Nil {
@@ -57,6 +61,10 @@ func (c *RedisCache) GetURL(ctx context.Context, shortCode string) (*model.URL, 
 	return &u, nil
 }
 
-func (c *RedisCache) Close() error {
-	return c.client.Close()
+func (cache *RedisCache) DelURL(ctx context.Context, shortCode string) error {
+	return cache.client.Del(ctx, urlPrefix+shortCode).Err()
+}
+
+func (cache *RedisCache) Close() error {
+	return cache.client.Close()
 }

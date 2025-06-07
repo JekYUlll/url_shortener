@@ -103,8 +103,8 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 	}()
 	// 6. 返回给上层
 	return &dto.CreateURLResponse{
-		ShortUrl:  s.bashURL + "/" + u.ShortCode,
-		ExpiredAt: u.ExpiredAt,
+		ShortUrl: s.bashURL + "/" + u.ShortCode,
+		//ExpiredAt: u.ExpiredAt,
 	}, nil
 }
 
@@ -159,7 +159,9 @@ func (s *URLService) DeleteAllExpired(ctx context.Context) error {
 	return s.repo.DeleteAllExpired(ctx)
 }
 
-// NEW: 从 repo 层提到 service, 与布隆过滤器的判断整合
+// TODO 短链接会过期，需要定时重建布隆过滤器（扫描整个数据库，很麻烦）
+
+// CheckShortCode NEW: 从 repo 层提到 service, 与布隆过滤器的判断整合
 // TODO 增加缓存的逻辑
 // 如果存在于数据库、但是过期了，也视为合法 —— 生成新链接，写入数据库覆盖之前的
 func (s *URLService) CheckShortCode(ctx context.Context, shortCode string) (CodeStatus, error) {
