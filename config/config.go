@@ -19,11 +19,12 @@ type Config struct {
 	Logger    LogConfig       `mapstructure:"logger"`
 	Email     EmailConfig     `mapstructure:"email"`
 	JWT       JWTConfig       `mapstructure:"jwt"`
+	RandNum   RandNumConfig   `mapstructure:"rand_num"`
 }
 
 // var Cfg *Config
 
-func LoadConfig(filePath string) (*Config, error) {
+func NewFromFile(filePath string) (*Config, error) {
 	viper.SetConfigFile(filePath)
 	viper.SetEnvPrefix("URL_SHORTENER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -77,9 +78,13 @@ func (d DatabaseConfig) getTLSMode() string {
 }
 
 type RedisConfig struct {
-	Address  string `mapstructure:"address"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Address         string        `mapstructure:"address"`
+	Password        string        `mapstructure:"password"`
+	DB              int           `mapstructure:"db"`
+	BloomFilterName string        `mapstructure:"bloom_filter_name"`
+	BloomErrorRate  float64       `mapstructure:"bloom_error_rate"`
+	BloomCapacity   uint          `mapstructure:"bloom_capacity"`
+	CacheTTL        time.Duration `mapstructure:"cache_ttl"`
 }
 
 type ServerConfig struct {
@@ -89,9 +94,10 @@ type ServerConfig struct {
 }
 
 type AppConfig struct {
-	BaseURL         string        `mapstructure:"base_url"`
-	DefaultDuration time.Duration `mapstructure:"default_duration"`
-	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
+	BaseURL          string        `mapstructure:"base_url"`
+	DefaultDuration  time.Duration `mapstructure:"default_duration"`
+	CleanupInterval  time.Duration `mapstructure:"cleanup_interval"`
+	SyncViewDuration time.Duration `mapstructure:"sync_view_duration"`
 }
 
 type ShortCodeConfig struct {

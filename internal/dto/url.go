@@ -6,7 +6,8 @@ type CreateURLRequest struct {
 	OriginalURL string `json:"original_url" validate:"required,url"`
 	CustomeCode string `json:"custom_code,omitempty" validate:"omitempty,min=4,max=10,alphanum"`
 	Duration    *int   `json:"duration,omitempty" validate:"omitempty,min=1,max=100"`
-	UserID      int    `json:"-"`
+	UserID      int    `json:"user_id" validate:"omitempty,min=1"`
+	// UserID      int    `json:"-"`
 }
 
 type CreateURLResponse struct {
@@ -17,7 +18,8 @@ type CreateURLResponse struct {
 type GetURLsRequest struct {
 	Page   uint `query:"page"`
 	Size   uint `query:"size"`
-	UserID int  `query:"-"`
+	UserID int  `query:"id"`
+	// UserID int  `query:"-"`
 }
 
 type GetURLsResponse struct {

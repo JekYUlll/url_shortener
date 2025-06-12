@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
+	"github.com/jekyulll/url_shortener/config"
+	"github.com/jekyulll/url_shortener/internal/cache"
 	"github.com/jekyulll/url_shortener/internal/dto"
 	"github.com/jekyulll/url_shortener/internal/model"
 	"github.com/jekyulll/url_shortener/internal/repository"
 	"github.com/jekyulll/url_shortener/pkg/filter"
+	"github.com/jekyulll/url_shortener/pkg/shortcode"
 	"gorm.io/gorm"
 )
 
@@ -22,9 +26,14 @@ const (
 	CodeInUse                       // 存在且有效
 )
 
-type Cacher interface {
+type URLCacher interface {
 	SetURL(ctx context.Context, url model.URL) error
-	GetURL(ctx context.Context, shortCode string) (*model.URL, error)
+	GetURL(ctx context.Context, shortCode string) (*model.URL, error) // TODO 返回 string
+	DelURL(ctx context.Context, shortCode string) error
+	IncreViews(ctx context.Context, shortCode string) error
+	ScanViews(ctx context.Context, cursor uint64, batchSize int64) (keys []string, nextCursor uint64, err error)
+	GetViews(ctx context.Context, shortCode string) (int, error)
+	DelViews(ctx context.Context, shortCode string) error
 }
 
 type ShortCodeGenerator interface {
@@ -36,11 +45,11 @@ type URLService struct {
 	filter             filter.BloomFilter
 	shortCodeGenerator ShortCodeGenerator
 	defaultDuration    time.Duration
-	cache              Cacher
+	cache              URLCacher
 	bashURL            string
 }
 
-func New(repo repository.URLRepository, filter filter.BloomFilter, generator ShortCodeGenerator, duration time.Duration, cache Cacher, baseURL string) *URLService {
+func NewURLService(repo repository.URLRepository, filter filter.BloomFilter, generator ShortCodeGenerator, cache URLCacher, cfg config.AppConfig) *URLService {
 	// 启动时加载所有有效短码到过滤器
 	if urls, err := repo.GetAllActiveURLs(context.Background()); err == nil {
 		for _, url := range urls {
@@ -49,16 +58,82 @@ func New(repo repository.URLRepository, filter filter.BloomFilter, generator Sho
 	}
 	return &URLService{
 		repo:               repo,
-		shortCodeGenerator: generator,
-		defaultDuration:    duration,
-		cache:              cache,
-		bashURL:            baseURL,
 		filter:             filter,
+		shortCodeGenerator: generator,
+		cache:              cache,
+		defaultDuration:    cfg.DefaultDuration,
+		bashURL:            cfg.BaseURL,
 	}
+}
+
+// GetURLs implements api.URLServicer.
+func (s *URLService) GetURLs(ctx context.Context, req dto.GetURLsRequest) (*dto.GetURLsResponse, error) {
+	rows, err := s.repo.GetURLsByUserID(ctx, int32(req.UserID), int32(req.Size), int32(req.Page-1))
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.FullURL, len(rows))
+	total := 0
+
+	for i := range rows {
+		// TODO 检查 total
+		row := rows[i]
+		views, err := s.cache.GetViews(ctx, row.ShortCode)
+		if err != nil {
+			return nil, err
+		}
+		row.Views += int32(views)
+		items[i] = dto.FullURL{
+			ID:          int(row.ID),
+			OriginalURL: row.OriginalURL,
+			ShortURL:    fmt.Sprintf("%s%s", s.bashURL, row.ShortCode),
+			ExpiredAt:   row.ExpiredAt,
+			IsCustom:    row.IsCustom,
+			Views:       uint(row.Views),
+		}
+		total = int(row.Views)
+	}
+	resp := dto.GetURLsResponse{
+		Items: items,
+		Total: total,
+	}
+	return &resp, nil
+}
+
+// DefaultURL implements api.URLServicer.
+func (s *URLService) DefaultURL(ctx context.Context) error {
+	// panic("unimplemented")
+	// TODO 函数签名需要修改，默认导航到一个404页面
+	return nil
+}
+
+// DeleteURL implements api.URLServicer.
+func (s *URLService) DeleteURL(ctx context.Context, shortCode string) error {
+	if err := s.repo.DeleteURLByShortCode(ctx, shortCode); err != nil {
+		return err
+	}
+	if err := s.cache.DelURL(ctx, shortCode); err != nil {
+		return err
+	}
+	if err := s.cache.DelViews(ctx, shortCode); err != nil {
+		return err
+	}
+	return nil
+}
+
+// IncreViews implements api.URLServicer.
+func (s *URLService) IncreViews(ctx context.Context, shortCode string) error {
+	return s.cache.IncreViews(ctx, shortCode)
+}
+
+// UpdateURLDuration implements api.URLServicer.
+func (s *URLService) UpdateURLDuration(ctx context.Context, req dto.UpdateURLDurationReq) error {
+	return s.repo.UpdateURLExpiredByShortCode(ctx, req.Code, req.ExpiredAt)
 }
 
 // 如出错返回 err，如短链接已存在，返回预定义错误 ErrShortCodeTaken
 func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*dto.CreateURLResponse, error) {
+	var expiredAt time.Time
 	// 1. 决定要用的短码：优先用用户自己的，其次自动生成
 	code := req.CustomeCode
 	var err error
@@ -80,10 +155,17 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 	// 2. 写入布隆过滤器
 	s.filter.Add(code)
 	// 3. 组装要入库的 URL 实体
+	if req.Duration == nil {
+		expiredAt = time.Now().Add(s.defaultDuration)
+	} else {
+		expiredAt = time.Now().Add(time.Hour * time.Duration(*req.Duration))
+	}
 	u := &model.URL{
 		OriginalURL: req.OriginalURL,
 		ShortCode:   code,
 		IsCustom:    req.CustomeCode != "",
+		UserID:      uint64(req.UserID),
+		ExpiredAt:   expiredAt,
 	}
 	// 4. 处理过期时间：不传的话使用默认有效期
 	if req.Duration == nil {
@@ -97,7 +179,7 @@ func (s *URLService) CreateURL(ctx context.Context, req dto.CreateURLRequest) (*
 	}
 	// 6. 异步写缓存
 	go func() {
-		if err := s.cache.SetURL(ctx, *u); err != nil {
+		if err := s.cache.SetURL(context.Background(), *u); err != nil {
 			log.Printf("failed to set cache: %v", err)
 		}
 	}()
@@ -131,7 +213,7 @@ func (s *URLService) GetURL(ctx context.Context, shortCode string) (string, erro
 	}
 	// 4. 存入缓存
 	go func() {
-		if err := s.cache.SetURL(ctx, *url); err != nil {
+		if err := s.cache.SetURL(context.Background(), *url); err != nil {
 			log.Printf("failed to set cache: %v", err)
 		}
 	}()
@@ -181,3 +263,45 @@ func (s *URLService) CheckShortCode(ctx context.Context, shortCode string) (Code
 	}
 	return CodeInUse, nil
 }
+
+func (s *URLService) SyncViewsToDB(ctx context.Context) error {
+	var cursor uint64
+	for {
+		var keys []string
+		var err error
+		keys, cursor, err = s.cache.ScanViews(ctx, cursor, 100)
+		if err != nil {
+			return err
+		}
+
+		for _, key := range keys {
+			views, err := s.cache.GetViews(ctx, key)
+			if err != nil {
+				return err
+			}
+
+			if views == 0 {
+				continue
+			}
+
+			if err := s.cache.DelViews(ctx, key); err != nil {
+				return err
+			}
+
+			shortCode := strings.Split(key, ":")[1]
+
+			if err := s.repo.UpdateViewsByShortCode(ctx, shortCode, int32(views)); err != nil {
+				return err
+			}
+		}
+
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return nil
+}
+
+var _ URLCacher = (*cache.RedisCache)(nil)
+var _ ShortCodeGenerator = (*shortcode.RandomShortCodeGeneratorImpl)(nil)
