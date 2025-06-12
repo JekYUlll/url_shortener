@@ -16,20 +16,29 @@ type Config struct {
 	App       AppConfig       `mapstructure:"app"`
 	ShortCode ShortCodeConfig `mapstructure:"shortcode"`
 	Filter    FilterConfig    `mapstructure:"filter"`
+	Logger    LogConfig       `mapstructure:"logger"`
+	Email     EmailConfig     `mapstructure:"email"`
+	JWT       JWTConfig       `mapstructure:"jwt"`
+	RandNum   RandNumConfig   `mapstructure:"rand_num"`
 }
 
-func LoadConfig(filePath string) (*Config, error) {
+// var Cfg *Config
+
+func NewFromFile(filePath string) (*Config, error) {
 	viper.SetConfigFile(filePath)
 	viper.SetEnvPrefix("URL_SHORTENER")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
+
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, err
 	}
+
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
+
 	return &config, nil
 }
 
@@ -69,9 +78,13 @@ func (d DatabaseConfig) getTLSMode() string {
 }
 
 type RedisConfig struct {
-	Address  string `mapstructure:"address"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Address         string        `mapstructure:"address"`
+	Password        string        `mapstructure:"password"`
+	DB              int           `mapstructure:"db"`
+	BloomFilterName string        `mapstructure:"bloom_filter_name"`
+	BloomErrorRate  float64       `mapstructure:"bloom_error_rate"`
+	BloomCapacity   uint          `mapstructure:"bloom_capacity"`
+	CacheTTL        time.Duration `mapstructure:"cache_ttl"`
 }
 
 type ServerConfig struct {
@@ -81,9 +94,10 @@ type ServerConfig struct {
 }
 
 type AppConfig struct {
-	BaseURL         string        `mapstructure:"base_url"`
-	DefaultDuration time.Duration `mapstructure:"default_duration"`
-	CleanupInterval time.Duration `mapstructure:"cleanup_interval"`
+	BaseURL          string        `mapstructure:"base_url"`
+	DefaultDuration  time.Duration `mapstructure:"default_duration"`
+	CleanupInterval  time.Duration `mapstructure:"cleanup_interval"`
+	SyncViewDuration time.Duration `mapstructure:"sync_view_duration"`
 }
 
 type ShortCodeConfig struct {
@@ -93,4 +107,26 @@ type ShortCodeConfig struct {
 type FilterConfig struct {
 	Capacity  uint    `mapstructure:"capacity"`
 	ErrorRate float64 `mapstructure:"error_rate"`
+}
+
+type LogConfig struct {
+	Level string `mapstructure:"level"`
+}
+
+type RandNumConfig struct {
+	Length int `mapstructure:"length"`
+}
+
+type JWTConfig struct {
+	Secret   string        `mapstructure:"secret"`
+	Duration time.Duration `mapstructure:"duration"`
+}
+
+type EmailConfig struct {
+	Password    string `mapstructure:"password"`
+	Username    string `mapstructure:"username"`
+	HostAddress string `mapstructure:"host_address"`
+	HostPort    string `mapstructure:"host_port"`
+	Subject     string `mapstructure:"subject"`
+	TestMail    string `mapstructure:"test_mail"`
 }
