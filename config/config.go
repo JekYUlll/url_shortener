@@ -97,7 +97,7 @@ type AppConfig struct {
 	BaseURL          string        `mapstructure:"base_url"`
 	DefaultDuration  time.Duration `mapstructure:"default_duration"`
 	CleanupInterval  time.Duration `mapstructure:"cleanup_interval"`
-	SyncViewDuration time.Duration `mapstructure:"sync_view_duration"`
+	SyncViewDuration time.Duration `mapstructure:"sync_view_interval"`
 }
 
 type ShortCodeConfig struct {

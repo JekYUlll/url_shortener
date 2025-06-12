@@ -1,29 +1,31 @@
 database:
-  driver: "mysql" 
-  host: "TODO"
-  port: 3306
-  user: "TODO"
-  password: "TODO"
-  dbname: "url_db"
-  ssl_mode: "disable"
+  driver: postgres
+  host: localhost
+  port: 5432
+  user: lang
+  password: password
+  dbname: urldb
+  ssl_mode: disable
   max_idle_conns: 5
   max_open_conns: 5
 
 redis:
-  address: "TODO"
-  password: "TODO"
+  address: localhost:6379
+  password:
   db: 0
+  url_duration: 1h
+  email_code_duration: 2m
 
 rand_num:
   length: 6
 
 email:
-  password: TODO
-  username: TODO
-  host_address: TODO
-  host_port: TODO
-  subject: "TODO"
-  test_mail: "TODO"
+  password: lqiPivBJPLnukHpy
+  username: MS_VyrzQl@trial-o65qngkw5owgwr12.mlsender.net
+  host_address: smtp.mailersend.net
+  host_port: 587
+  subject: "This is my test mail"
+  test_mail: "jingyifsy@gmail.com"
 
 server:
   addr: ":8080"
@@ -32,19 +34,15 @@ server:
 
 app:
   base_url: "http://localhost:8080"
-  default_duration: 12h
-  cleanup_interval: 1h
+  default_duration: 10h
+  sync_view_duration: 2h
 
 shortcode:
   length: 6
-
-filter:
-  capacity: 1000000
-  error_rate: 0.01
 
 logger:
   level: info
 
 jwt:
-  secret: "TODO"
+  secret: "mycompletedsecret"
   duration: 24h
