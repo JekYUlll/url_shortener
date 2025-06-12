@@ -128,6 +128,11 @@ func (s *URLService) IncreViews(ctx context.Context, shortCode string) error {
 
 // UpdateURLDuration implements api.URLServicer.
 func (s *URLService) UpdateURLDuration(ctx context.Context, req dto.UpdateURLDurationReq) error {
+	// FIXME 是否会导致缓存里的持续时间还在？
+	// 因此此处删除缓存，旁路缓存模式
+	if err := s.cache.DelURL(ctx, req.Code); err != nil {
+		return fmt.Errorf("failed to delete cache: %v", err.Error())
+	}
 	return s.repo.UpdateURLExpiredByShortCode(ctx, req.Code, req.ExpiredAt)
 }
 
